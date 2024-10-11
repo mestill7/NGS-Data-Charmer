@@ -30,13 +30,13 @@ def choose_rule_all(config):
     if config["to_multiqc"] == "TRUE":
         myout.append("output/multiqc_report.html")
         # myout.append(expand("output/bam/{sample}.unique.sorted.rmdup.chr.bam", sample=SAMPLES))
-    if config["to_bw"] == "TRUE" and config["experiment"] != "rnaseq":
+    if config["to_bw"] == "TRUE" :
         myout.append(
-            expand('output/bw/{sample}.unique.sorted.rmdup.chr.bw', 
+            expand('output/bw/{sample}.rmdup.chr.bw', 
                 sample=SAMPLES))
     if config["to_bed"] == "TRUE" and config["experiment"] != "rnaseq":
         myout.append(
-            expand('output/bed/{sample}.unique.sorted.rmdup.chr.bed', 
+            expand('output/bed/{sample}.rmdup.chr.bed', 
                 sample=SAMPLES))
     if config["to_tdf"] == "TRUE" and config["experiment"] != "rnaseq":
         myout.append(
@@ -154,8 +154,10 @@ rule trim_fastq_fastqc:
         if config['trim_polyA'] == "TRUE":
             if config["type"] == "paired":
                 if config["use_UMI"] == "TRUE":
-                    shell("umi_tools extract -I {input.pair1} --bc-pattern={params.umi_1}  --bc-pattern2={params.umi_2} \
-                    --read2-in={params.pair2} --stdout=output/temp_dir/{wildcards.sample}_R1.fq{suffix} \
+                    shell("umi_tools extract -I {input.pair1} \
+                    --bc-pattern={params.umi_1}  --bc-pattern2={params.umi_2} \
+                    --read2-in={params.pair2} \
+                    --stdout=output/temp_dir/{wildcards.sample}_R1.fq{suffix} \
                     --read2-out=output/temp_dir/{wildcards.sample}_R2.fq{suffix}")
                 else:
                     # mv files to R1 and R2 ending in temporary directory
@@ -205,8 +207,10 @@ rule trim_fastq_fastqc:
         else:
             if config["type"] == "paired":
                 if config["use_UMI"] == "TRUE":
-                    shell("umi_tools extract -I {input.pair1} --bc-pattern={params.umi_1}  --bc-pattern2={params.umi_2} \
-                    --read2-in={params.pair2} --stdout=output/temp_dir/{wildcards.sample}_R1.fq{suffix} \
+                    shell("umi_tools extract -I {input.pair1} \
+                    --bc-pattern={params.umi_1}  --bc-pattern2={params.umi_2} \
+                    --read2-in={params.pair2} \
+                    --stdout=output/temp_dir/{wildcards.sample}_R1.fq{suffix} \
                     --read2-out=output/temp_dir/{wildcards.sample}_R2.fq{suffix}")
                 else:
                     # mv files to R1 and R2 ending in temporary directory
@@ -233,7 +237,8 @@ rule trim_fastq_fastqc:
                     output/trim_fastq/{wildcards.sample}_R2_trimmed.fq.gz")
             if config["type"] == "single":
                 if config["use_UMI"] == "TRUE":
-                    shell("umi_tools extract --stdin={input.pair1} --bc-pattern={params.umi_1} \
+                    shell("umi_tools extract --stdin={input.pair1} \
+                        --bc-pattern={params.umi_1} \
                         --log={log} --stdout output/temp_dir/{wildcards.sample}_R1.fq{suffix}")
                 else:
                     # mv files to R1 and R2 ending in temporary directory
@@ -332,10 +337,10 @@ rule fastq_to_bam_HISAT:
         shell("samtools sort -@ 8 -O BAM -o {output.bam} output/bam/{wildcards.sample}.sam")
         shell("rm output/bam/{wildcards.sample}.sam")
         shell("samtools index {output.bam}")
-        if config["experiment"] != "cutrun" :
-            shell("rm output/temp_dir/{wildcards.sample}_R1.fq{suffix}")
-            if config["type"] == "paired":
-                shell("rm output/temp_dir/{wildcards.sample}_R2.fq{suffix}")
+        ## Remove temporary files
+        shell("rm output/temp_dir/{wildcards.sample}_R1.fq{suffix}")
+        if config["type"] == "paired":
+            shell("rm output/temp_dir/{wildcards.sample}_R2.fq{suffix}")
         if config["keep_fastq"] == "FALSE":
             shell("rm output/trim_fastq/{wildcards.sample}_R1_trimmed.fq.gz \
                     output/trim_fastq/{wildcards.sample}_R2_trimmed.fq.gz")
@@ -397,11 +402,13 @@ if config["experiment"] != "rnaseq" :
             "output/logs/{sample}.rmdup.log"
         run:
             if config["experiment"] == "cutrun" :
-                shell("picard MarkDuplicates --REMOVE_DUPLICATES true -I {input.sorted_bam} -O {output.dup_removed} \
-                    -M output/logs/{wildcards.sample}_marked_dup_metrics.txt -VALIDATION_STRINGENCY SILENT 2> {log}")
+                shell("picard MarkDuplicates --REMOVE_DUPLICATES true \
+                      -I {input.sorted_bam} -O {output.dup_removed} \
+                      -M output/logs/{wildcards.sample}_marked_dup_metrics.txt \
+                      -VALIDATION_STRINGENCY SILENT 2> {log}")
             if config["experiment"] == "chipseq" :
-                shell("picard MarkDuplicates --REMOVE_DUPLICATES true -I {input.sorted_bam} -O {output.dup_removed} \
-                    -M output/logs/{wildcards.sample}_marked_dup_metrics.txt 2> {log}")
+                shell("picard MarkDuplicates --REMOVE_DUPLICATES true -I {input.sorted_bam} \
+                    -O {output.dup_removed} -M output/logs/{wildcards.sample}_marked_dup_metrics.txt 2> {log}")
             if config["keep_unfiltered_bam"] == "FALSE":
                 shell("rm -f {input.sorted_bam} {input.sorted_bam}.bai")
             ## Rule for calculating insert size for PE sequencing
@@ -461,6 +468,22 @@ if config["experiment"] == "rnaseq":
                     REF_FLAT={params.refflat} \
                     STRAND=FIRST_READ_TRANSCRIPTION_STRAND")
 
+
+# Eliminate extraneous chromosomes from bam file
+rule rmdup_to_chrbam:
+    input:
+        rules.sortedbam_to_rmdup.output if config["experiment"] == "rnaseq" else "output/bam/{sample}.unique.sorted.rmdup.bam"
+    output:
+        chrbam = "output/bam/{sample}.rmdup.chr.bam",
+        chrbambai = "output/bam/{sample}.rmdup.chr.bam.bai"
+    log:
+        "output/logs/{sample}.chrbam.log"
+    run:
+        shell("samtools view -H {input} | \
+            sed -e \"s/SN:\([0-9XY]\)/SN:chr\\1/\" -e \"s/SN:MT/SN:chrM/\" | \
+            samtools reheader - {input} > {output.chrbam}")
+        shell("samtools index {output.chrbam}")
+
 # Additional rules for ChIP-seq
 # Create TDF files
 rule rmdup_to_tdf:
@@ -476,28 +499,13 @@ rule rmdup_to_tdf:
         "igvtools count {input} {output.tdf} {params.chr_sizes} "
         "2> {log}"
 
-# Eliminate extraneous chromosomes from bam file
-rule rmdup_to_chrbam:
-    input:
-        "output/bam/{sample}.unique.sorted.rmdup.bam"
-    output:
-        chrbam = "output/bam/{sample}.unique.sorted.rmdup.chr.bam",
-        chrbambai = "output/bam/{sample}.unique.sorted.rmdup.chr.bam.bai"
-    log:
-        "output/logs/{sample}.chrbam.log"
-    run:
-        shell("samtools view -H {input} | \
-            sed -e \"s/SN:\([0-9XY]\)/SN:chr\\1/\" -e \"s/SN:MT/SN:chrM/\" | \
-            samtools reheader - {input} > {output.chrbam}")
-        shell("samtools index {output.chrbam}")
-
 # Create bigwig from bam file (main chromosomes only)
 rule chrbam_to_bw:
     input:
-        chrbam = rules.rmdup_to_chrbam.output.chrbam,
-        chrbambai = rules.rmdup_to_chrbam.output.chrbambai
+        chrbam = "output/bam/{sample}.rmdup.chr.bam",
+        chrbambai = "output/bam/{sample}.rmdup.chr.bam.bai"
     output:
-        bw_file = "output/bw/{sample}.unique.sorted.rmdup.chr.bw"
+        bw_file = "output/bw/{sample}.rmdup.chr.bw"
     log:
         "output/logs/{sample}.bw.log"
     run:
@@ -507,9 +515,10 @@ rule chrbam_to_bw:
 # Create bed file from bam file (main chromosomes only)
 rule chrbam_to_bed:
     input:
-        chrbam = "output/bam/{sample}.unique.sorted.rmdup.chr.bam"
+        chrbam = "output/bam/{sample}.rmdup.chr.bam",
+        chrbambai = "output/bam/{sample}.rmdup.chr.bam.bai"
     output:
-        bed = "output/bed/{sample}.unique.sorted.rmdup.chr.bed"
+        bed = "output/bed/{sample}.rmdup.chr.bed"
     log:
         "output/logs/{sample}.bed.log"
     shell:
@@ -671,7 +680,7 @@ rule fpkm_matrix:
 rule run_multiqc:
     input:
         "output/fpkm_genic_matrix.txt" if config["experiment"] == "rnaseq" else \
-        expand("output/bam/{sample}.unique.sorted.rmdup.chr.bam", sample=SAMPLES)
+        expand("output/bam/{sample}.rmdup.chr.bam", sample=SAMPLES)
     output:
         multiqc_report = "output/multiqc_report.html"
     params:

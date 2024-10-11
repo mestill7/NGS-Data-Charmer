@@ -21,7 +21,7 @@ UMI_read1_pattern: "X"
 UMI_read2_pattern: "NNNNNNNN"
 ## See https://umi-tools.readthedocs.io/en/latest/ for informaton on "umi_tools extract" parameters
 
-# FOR CUT&RUN AND CHIPSEQ -
+# FOR CUT&RUN, CHIPSEQ, and RNASEQ (if you wish to generate bigwigs for RNASEQ)
 chr_sizes: "/path/to/mm10/mm10.chrom.sizes" # path to chrom.sizes file (only for chipseq)
 # This file must named as follows "<genomeid>.chrom.sizes", any other filename format (e.g. "mm10_chr_len") will
 # cause the TDF step to produce an empty TDF. Please see the Broad website for more information:
